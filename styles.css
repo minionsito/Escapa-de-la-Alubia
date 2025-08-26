@@ -1,8 +1,0 @@
-:root { color-scheme: light dark; }
-* { box-sizing: border-box; }
-body { margin: 0; font-family: system-ui, sans-serif; line-height: 1.5; }
-.site-header, .site-footer { padding: 1rem; background: #111; color: #fff; }
-nav a { color: #ffd24d; margin-right: .75rem; text-decoration: none; }
-main { padding: 1.25rem; max-width: 960px; margin: 0 auto; }
-figure { margin: 1rem 0; }
-img { max-width: 100%; height: auto; display: block; }
