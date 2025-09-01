@@ -30,7 +30,7 @@ COL_BLACK = (0, 0, 0)
 # 👉 Cambia estas rutas por tus archivos reales
 FLOOR_PATH = "C:/Users/Admin/Downloads/fondo.jpeg"   # textura del suelo (tablones)
 GUN_PATH   = "C:/Users/Admin/Downloads/pistola.png"     # sprite de la pistola (PNG con alpha)
-ENEMY_PATH = "C:/Users/Admin/Downloads/enemigo.png"   # sprite 2D del enemigo (PNG con alpha)
+ENEMY_PATH = "C:/Users/Admin/Downloads/alubia_mewing.png"   # sprite 2D del enemigo (PNG con alpha)
 WALL_PATH =  "C:/Users/Admin/Downloads/fondo.jpeg" # textura de pared de tablones
 
 
@@ -62,6 +62,15 @@ MAP_H, MAP_W = len(MAP), len(MAP[0])
 # Inicialización
 # =======================
 pygame.init()
+# =======================
+# Inicialización de joysticks
+# =======================
+joysticks = []
+for i in range(pygame.joystick.get_count()):
+    j = pygame.joystick.Joystick(i)
+    j.init()
+    joysticks.append(j)
+
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Escapa de la Alubia")
 clock = pygame.time.Clock()
@@ -75,78 +84,110 @@ damage_flash = 0.0
 player_speed = 5  # velocidad del jugador, ajusta a tu gusto
 
 
-# ======================
+# =======================
 # 🎮 Controles táctiles
-# ======================
-
-# Posiciones de controles
-joystick_center = (120, HEIGHT - 120)   # Joystick abajo izquierda
+# =======================
+joystick_center = (120, HEIGHT - 120)
 joystick_radius = 70
-joystick_input = (0, 0)
+joystick_input = [0.0, 0.0]  # mutable para poder actualizar
 
-# Botones
-fire_button_rect = pygame.Rect(WIDTH - 180, HEIGHT - 160, 120, 120)   # Disparo
-reload_button_rect = pygame.Rect(WIDTH - 180, HEIGHT - 300, 120, 100) # Recarga
+fire_button_rect = pygame.Rect(WIDTH - 180, HEIGHT - 160, 120, 120)
+reload_button_rect = pygame.Rect(WIDTH - 180, HEIGHT - 300, 120, 100)
 
 def draw_touch_controls():
-    # 🎮 Joystick base
-    pygame.draw.circle(screen, (80, 80, 80), joystick_center, joystick_radius, 5)
-    # Indicador de posición (punto dentro del joystick)
-    pygame.draw.circle(screen, (200, 200, 200), 
-                       (joystick_center[0] + int(joystick_input[0]*joystick_radius),
-                        joystick_center[1] + int(joystick_input[1]*joystick_radius)), 
-                       20)
-
-    # 🔴 Botón disparo
-    pygame.draw.rect(screen, (200,0,0), fire_button_rect, border_radius=25)
-    font = pygame.font.SysFont(None, 40)
+    # Joystick base
+    pygame.draw.circle(screen, (100,100,100), joystick_center, joystick_radius, 5)
+    # Joystick indicador
+    pygame.draw.circle(screen, (0,255,0),
+        (joystick_center[0] + int(joystick_input[0]*joystick_radius),
+         joystick_center[1] + int(joystick_input[1]*joystick_radius)), 20)
+    # Botón FIRE
+    pygame.draw.rect(screen, (255,0,0), fire_button_rect, border_radius=25)
     text = font.render("FIRE", True, (255,255,255))
     screen.blit(text, (fire_button_rect.centerx - text.get_width()//2,
                        fire_button_rect.centery - text.get_height()//2))
-
-    # 🔵 Botón recarga
-    pygame.draw.rect(screen, (0,0,200), reload_button_rect, border_radius=25)
+    # Botón RELOAD
+    pygame.draw.rect(screen, (0,0,255), reload_button_rect, border_radius=25)
     text2 = font.render("RELOAD", True, (255,255,255))
     screen.blit(text2, (reload_button_rect.centerx - text2.get_width()//2,
                         reload_button_rect.centery - text2.get_height()//2))
 
-
-def handle_touch_controls(event):
+def handle_touch_event(event):
     global joystick_input
-    if event.type == pygame.MOUSEBUTTONDOWN or event.type == pygame.MOUSEMOTION:
+    if event.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEMOTION):
         x, y = event.pos
-        # 🎮 Joystick movimiento
         dx = x - joystick_center[0]
         dy = y - joystick_center[1]
-        dist = (dx**2 + dy**2) ** 0.5
+        dist = math.hypot(dx, dy)
         if dist < joystick_radius:
-            joystick_input = (dx/joystick_radius, dy/joystick_radius)
-        # 🔴 Disparo
+            # Normalizamos el vector y lo invertimos verticalmente para y pantalla
+            joystick_input[0] = dx / joystick_radius
+            joystick_input[1] = dy / joystick_radius * -1
+        else:
+            joystick_input[0] = joystick_input[1] = 0.0
+
         if fire_button_rect.collidepoint(x, y):
-            disparar()
-        # 🔵 Recarga
+            fire()
         if reload_button_rect.collidepoint(x, y):
-            recargar()
+            start_reload()
 
-    if event.type == pygame.MOUSEBUTTONUP:
-        joystick_input = (0, 0)  # suelta el joystick
-
-
-# ======================
-# 💡 En tu loop principal
-# ======================
-for event in pygame.event.get():
-    if event.type == pygame.QUIT:
-        running = False
-    handle_touch_controls(event)
-
-# Usa el joystick_input para mover al jugador:
-player_x += joystick_input[0] * player_speed
-player_y += joystick_input[1] * player_speed
+    elif event.type == pygame.MOUSEBUTTONUP:
+        joystick_input[0] = 0.0
+        joystick_input[1] = 0.0
 
 
-# Dibuja siempre los controles al final
-draw_touch_controls()
+
+
+    # =====================
+    # EVENTOS
+    # =====================
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+
+        # 👇 controles táctiles / ratón
+        (event)
+
+    # =====================
+    # LÓGICA DEL JUEGO
+    # =====================
+    # Si tienes pantalla de intro
+    if en_intro:  
+        # Aquí tu lógica de intro (ej: esperar ENTER para empezar)
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_RETURN]:
+            en_intro = False
+
+    else:
+        # Movimiento con joystick
+        player_x += joystick_input[0] * player_speed
+        player_y += joystick_input[1] * player_speed
+
+        # Lógica del juego normal (enemigos, colisiones, disparos…)
+        # mover_enemigos()
+        # checar_colisiones()
+
+    # =====================
+    # DIBUJO DEL JUEGO
+    # =====================
+    screen.fill((0, 0, 0))  # fondo negro
+
+    if en_intro:
+        ()
+    else:
+        (player_x, player_y)
+        ()
+        # dibujar_balas()
+
+    # 👇 al final siempre los botones/joystick
+    draw_touch_controls()
+
+    # =====================
+    # ACTUALIZAR PANTALLA
+    # =====================
+    pygame.display.flip()
+    clock.tick(60)
+
 
 
 # Texturas / Sprites
@@ -246,8 +287,8 @@ class Enemy:
 enemies = [
     Enemy(8.5, 8.5),
     Enemy(12.5, 4.5),
-    Enemy(10.5, 12.5),
-    Enemy(15.5, 8.5),
+    Enemy(9.5, 12.5),
+    Enemy(15.5, 6.5),
 ]
 
 # =======================
@@ -713,20 +754,37 @@ class RoundManager:
     def __init__(self):
         self.round = 0
         self.spawn_timer = 0.0
-        self.spawn_interval = 1.0  # segundos entre enemigos
+        self.spawn_interval = 1.0
         self.max_enemies = 5
         self.enemies_spawned = 0
+        self.round_active = False  # ← controla si la ronda está en curso
 
     def start_next_round(self):
         self.round += 1
         self.enemies_spawned = 0
-        print(f"Ronda {self.round} comenzando...")  # opcional
+        self.round_active = True  # la ronda empezó
+        print(f"Ronda {self.round} comenzando...")
 
     def update(self, dt):
         global enemies
-        # Si no hay enemigos vivos, empezar nueva ronda automáticamente
-        if all(not e.alive for e in enemies):
+
+        # Si no hay ronda activa y todos los enemigos muertos → nueva ronda
+        if not self.round_active and all(not e.alive for e in enemies):
             self.start_next_round()
+
+        if not self.round_active:
+            return
+
+        # Spawn progresivo
+        self.spawn_timer += dt
+        if self.spawn_timer >= self.spawn_interval and self.enemies_spawned < self.max_enemies * self.round:
+            self.spawn_timer = 0.0
+            self.spawn_enemy()
+            self.enemies_spawned += 1
+
+        # Si ya spawneó todos los enemigos de esta ronda
+        if self.enemies_spawned >= self.max_enemies * self.round:
+            self.round_active = False  # ronda completada, espera a que los enemigos mueran
 
         # Spawn progresivo de enemigos
         self.spawn_timer += dt
@@ -748,39 +806,47 @@ class RoundManager:
 
 
 # =======================
-# Main loop
+# Main loop limpio (sin joysticks)
 # =======================
-
 def main():
+    global en_intro
+    en_intro = True
+
     global player_x, player_y, player_angle, time_since_shot, gun_recoil
     global damage_flash, ammo, reloading, reload_timer, enemies
 
     round_manager = RoundManager()
-
     running = True
     while running:
         dt = clock.tick(60) / 1000.0
         time_since_shot = max(0.0, time_since_shot - dt)
+        
 
-        # Eventos
+        # =====================
+        # EVENTOS
+        # =====================
         for e in pygame.event.get():
             if e.type == pygame.QUIT:
                 running = False
             elif e.type == pygame.MOUSEBUTTONDOWN:
                 if e.button == 1:
-                    fire()
+                    fire()  # disparo normal con ratón
             elif e.type == pygame.KEYDOWN:
                 if e.key == pygame.K_r:
-                    start_reload()
+                    start_reload()  # recarga normal con teclado
 
-        # Recarga
+        # =====================
+        # RECARGA
+        # =====================
         if reloading:
             reload_timer -= dt
             if reload_timer <= 0.0:
                 ammo = max_ammo
                 reloading = False
 
-        # Movimiento jugador
+        # =====================
+        # MOVIMIENTO JUGADOR
+        # =====================
         keys = pygame.key.get_pressed()
         speed = MOVE_SPEED * (SPRINT_MULT if (keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]) else 1.0)
 
@@ -798,12 +864,16 @@ def main():
         if keys[pygame.K_LEFT]:  player_angle -= ROT_SPEED * dt
         if keys[pygame.K_RIGHT]: player_angle += ROT_SPEED * dt
 
-        # Mundo
+        # =====================
+        # LÓGICA DEL JUEGO
+        # =====================
         update_bullets(dt)
         update_enemies(dt)
-        round_manager.update(dt)  # <-- aquí se llama al spawn por rondas
+        round_manager.update(dt)  # rondas automáticas
 
-        # Render
+        # =====================
+        # RENDERIZADO
+        # =====================
         z_buffer = cast_and_draw()
         draw_enemy_sprites(z_buffer)
         draw_bullets(z_buffer)
@@ -811,8 +881,9 @@ def main():
         draw_hud()
         draw_gun()
 
-        # Retroceso pistola + flash de daño
-        if gun_recoil > 0: gun_recoil = max(0, gun_recoil - RECOIL_RECOVER*dt)
+        # Retroceso pistola + flash daño
+        if gun_recoil > 0: 
+            gun_recoil = max(0, gun_recoil - RECOIL_RECOVER*dt)
         if damage_flash > 0.0:
             overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
             alpha = int(120 * (damage_flash / 0.22))
@@ -820,7 +891,9 @@ def main():
             screen.blit(overlay, (0,0))
             damage_flash = max(0.0, damage_flash - dt)
 
-        # Game over
+        # =====================
+        # GAME OVER
+        # =====================
         if player_health <= 0:
             go = font.render("GAME OVER - Pulsa ESC para salir", True, (255, 80, 80))
             screen.blit(go, (WIDTH//2 - go.get_width()//2, HEIGHT//2 - go.get_height()//2))
@@ -838,6 +911,8 @@ def main():
 
     pygame.quit()
     sys.exit()
+
+
 
 
 
